@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>نظام الكاشير الاحترافي المتكامل</title>
+
+<script src="https://unpkg.com/@zxing/library@latest"></script>
+
+<style>
+body{font-family:Arial,sans-serif;margin:0;background:#eef1f5;width:100%;overflow-x:hidden}
+.header{background:#1e293b;color:white;padding:15px;font-size:20px;display:flex;align-items:center;gap:15px}
+.menuBtn{font-size:26px;cursor:pointer}
+.sidebar{position:fixed;top:0;right:-300px;width:260px;height:100%;background:#0f172a;color:white;padding:20px;transition:right .3s;z-index:1000;box-sizing:border-box}
+.sidebar button{width:100%;padding:12px;margin-top:10px;border:none;border-radius:6px;background:#22c55e;color:white;cursor:pointer;text-align:right}
+.container{padding:15px;max-width:100%;margin:auto}
+.controls{background:white;padding:20px;border-radius:10px;display:flex;flex-wrap:wrap;gap:10px;justify-content:center;box-shadow:0 2px 5px rgba(0,0,0,.1)}
+input,select{padding:10px;border-radius:6px;border:1px solid #ccc;font-size:14px;box-sizing:border-box}
+button{padding:10px 15px;border:none;border-radius:6px;background:#3b82f6;color:white;cursor:pointer}
+button:active{opacity:.8}
+.btn-success{background:#22c55e}
+.btn-danger{background:#ef4444}
+.btn-edit{background:#f59e0b;color:white;margin-left:5px}
+.tableBox{width:100%;overflow-x:auto;margin-top:20px;background:white;border-radius:8px;box-shadow:0 2px 5px rgba(0,0,0,.05)}
+table{width:100%;border-collapse:collapse}
+th{background:#334155;color:white;padding:12px}
+td{padding:12px;border-bottom:1px solid #eee;text-align:center}
+.qty-controls{display:flex;gap:5px;justify-content:center;align-items:center}
+.btn-qty{padding:5px 10px;font-weight:bold;min-width:35px}
+.checkout-section{margin-top:20px;background:white;padding:20px;border-radius:10px;text-align:center;box-shadow:0 2px 5px rgba(0,0,0,.1)}
+.total{font-size:26px;font-weight:bold;color:#1e293b;margin-bottom:15px}
+#receipt-render{position:absolute;left:-9999px;top:0;width:380px;background:#fff;padding:30px;color:#000;font-family:Arial,sans-serif;box-sizing:content-box}
+.receipt-header{text-align:center;border-bottom:2px dashed #000;padding-bottom:10px;margin-bottom:15px}
+.receipt-table{width:100%;border-collapse:collapse;margin:15px 0}
+.receipt-table th{background:none;color:#000;border-bottom:1px solid #000;text-align:right;font-size:14px}
+.receipt-table td{padding:8px 0;text-align:right;border:none;font-size:14px}
+.receipt-footer{border-top:2px dashed #000;padding-top:10px;text-align:center;font-size:14px}
+.modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:2000}
+.modalContent{background:white;margin:30px auto;padding:20px;width:90%;max-width:450px;border-radius:12px;text-align:center;max-height:80vh;overflow-y:auto;box-sizing:border-box}
+video{width:100%;border-radius:10px;background:#000;margin-top:10px;display:none;border:8px solid #000;transition:border-color .2s;box-sizing:border-box}
+.flash-success{border-color:#22c55e!important}
+.checkout-buttons{display:flex;gap:10px;flex-wrap:wrap}
+.checkout-buttons button{flex:1;min-width:130px;font-size:17px;padding:14px}
+</style>
+</head>
+
+<body>
+
+<div class="header">
+    <span class="menuBtn" onclick="toggleMenu()">☰</span>
+    <span id="display-store-name">متجر الكاشير</span>
+</div>
+
+<div class="sidebar" id="menu">
+    <h3>الإدارة</h3>
+    <button onclick="changeStoreName()">🏠 تعديل اسم المتجر</button>
+    <button onclick="openAddProduct()">➕ إضافة منتج جديد</button>
+    <button onclick="showProducts()">📦 عرض المخزن (منتجات)</button>
+    <button onclick="openAddCoupon()">🎫 إضافة كوبون جديد</button>
+    <button onclick="showCoupons()">📜 عرض الكوبونات</button>
+    <button style="background:#64748b;margin-top:30px" onclick="toggleMenu()">إغلاق</button>
+</div>
+
+<div class="container">
+
+    <div class="controls">
+        <input id="scanCode" placeholder="الباركود">
+        <input id="qty" type="number" value="1" min="1" style="width:60px">
+        <button class="btn-success" onclick="addByCode()">إضافة</button>
+        <button onclick="openScannerBill()">📷 كاميرا</button>
+    </div>
+
+    <div class="tableBox">
+        <table>
+            <thead>
+                <tr>
+                    <th>المنتج</th>
+                    <th>السعر</th>
+                    <th>الكمية</th>
+                    <th>المجموع</th>
+                    <th>إجراء</th>
+                </tr>
+            </thead>
+            <tbody id="bill"></tbody>
+        </table>
+    </div>
+
+    <div class="checkout-section">
+        <div class="total" id="total">الإجمالي: 0.00 ريال</div>
+
+        <div style="display:flex;gap:10px;justify-content:center;margin-bottom:15px;flex-wrap:wrap">
+            <input id="discountCode" placeholder="كود الخصم" style="width:150px">
+            <button onclick="applyDiscount()">تطبيق</button>
+        </div>
+
+        <div id="discountMsg" style="margin-bottom:15px;font-size:14px;font-weight:bold"></div>
+
+        <div class="checkout-buttons">
+            <button class="btn-success" onclick="completeSale()">💰 إتمام البيع</button>
+            <button onclick="printInvoice()">🖨️ طباعة الفاتورة</button>
+        </div>
+    </div>
+</div>
+
+<div id="receipt-render">
+    <div class="receipt-header">
+        <h2 id="r-store-name" style="margin:0">اسم المتجر</h2>
+        <p>فاتورة مبيعات</p>
+        <p id="r-date" style="font-size:12px"></p>
+    </div>
+
+    <table class="receipt-table">
+        <thead>
+            <tr>
+                <th>الصنف</th>
+                <th>كمية</th>
+                <th>السعر</th>
+                <th>إجمالي</th>
+            </tr>
+        </thead>
+        <tbody id="r-items"></tbody>
+    </table>
+
+    <div style="text-align:left;margin-top:10px">
+        <p>المجموع الفرعي: <span id="r-subtotal">0</span> ريال</p>
+        <p id="r-discount-row" style="display:none">
+            الخصم: -<span id="r-discount">0</span> ريال
+        </p>
+        <h3 style="border-top:1px solid #000;padding-top:5px">
+            الإجمالي النهائي:
+            <span id="r-total">0</span> ريال
+        </h3>
+    </div>
+
+    <div class="receipt-footer">
+        <p>شكراً لشرائكم من متجرنا</p>
+    </div>
+</div>
+
+<!-- نافذة المنتجات -->
+<div class="modal" id="productsModal">
+    <div class="modalContent">
+        <h3>المخزن (المنتجات)</h3>
+        <div class="tableBox">
+            <table>
+                <thead>
+                    <tr><th>الاسم</th><th>السعر</th><th>الباركود</th><th>تحكم</th></tr>
+                </thead>
+                <tbody id="productsList"></tbody>
+            </table>
+        </div>
+        <br>
+        <button onclick="closeModal('productsModal')">إغلاق</button>
+    </div>
+</div>
+
+<!-- تعديل المنتج -->
+<div class="modal" id="editProductModal">
+    <div class="modalContent">
+        <h3>تعديل بيانات المنتج</h3>
+        <div style="text-align:right">
+            <label>الاسم:</label>
+            <input id="editName" style="width:100%">
+        </div>
+        <br>
+        <div style="text-align:right">
+            <label>السعر:</label>
+            <input id="editPrice" type="number" min="0" step="any" style="width:100%">
+        </div>
+        <br>
+        <div style="text-align:right">
+            <label>الباركود:</label>
+            <input id="editCode" style="width:100%">
+        </div>
+        <br>
+        <input type="hidden" id="oldCode">
+        <button class="btn-success" onclick="saveProductEdit()" style="width:100%">حفظ التعديلات</button>
+        <br><br>
+        <button class="btn-danger" onclick="closeModal('editProductModal')" style="width:100%">إلغاء</button>
+    </div>
+</div>
+
+<!-- إضافة كوبون -->
+<div class="modal" id="addCouponModal">
+    <div class="modalContent">
+        <h3>إضافة كوبون جديد</h3>
+        <input id="cCode" placeholder="الكود" style="width:85%">
+        <br><br>
+        <input id="cValue" type="number" min="0" placeholder="القيمة" style="width:85%">
+        <br><br>
+        <select id="cType" style="width:85%;height:40px">
+            <option value="percent">نسبة (%)</option>
+            <option value="fixed">مبلغ ثابت</option>
+        </select>
+        <br><br>
+        <button class="btn-success" onclick="saveCoupon()" style="width:85%">حفظ</button>
+        <br><br>
+        <button class="btn-danger" onclick="closeModal('addCouponModal')">إلغاء</button>
+    </div>
+</div>
+
+<!-- عرض الكوبونات -->
+<div class="modal" id="showCouponsModal">
+    <div class="modalContent">
+        <h3>الكوبونات</h3>
+        <div class="tableBox">
+            <table>
+                <thead>
+                    <tr><th>الكود</th><th>القيمة</th><th>النوع</th><th>حذف</th></tr>
+                </thead>
+                <tbody id="couponsList"></tbody>
+            </table>
+        </div>
+        <br>
+        <button onclick="closeModal('showCouponsModal')">إغلاق</button>
+    </div>
+</div>
+
+<!-- إضافة منتج -->
+<div class="modal" id="addModal">
+    <div class="modalContent">
+        <h3>منتج جديد</h3>
+        <input id="pname" placeholder="الاسم" style="width:85%">
+        <br><br>
+        <input id="pprice" type="number" min="0" step="any" placeholder="السعر" style="width:85%">
+        <br><br>
+        <div style="display:flex;gap:6px;width:90%;margin:0 auto;align-items:center">
+            <input id="pcode" placeholder="الباركود" style="width:100%;min-width:0">
+            <button type="button" onclick="openScannerProduct()" style="white-space:nowrap">📷 قراءة</button>
+        </div>
+        <br>
+        <button class="btn-success" onclick="saveProduct()" style="width:85%">حفظ</button>
+        <br><br>
+        <button class="btn-danger" onclick="closeModal('addModal')">إلغاء</button>
+    </div>
+</div>
+
+<!-- كاميرا الكاشير -->
+<div class="modal" id="scannerBillModal">
+    <div class="modalContent">
+        <h3>كاميرا الكاشير</h3>
+        <video id="videoBill" style="display:block"></video>
+        <br>
+        <button class="btn-danger" onclick="closeModal('scannerBillModal')">إيقاف</button>
+    </div>
+</div>
+
+<!-- كاميرا المنتجات -->
+<div class="modal" id="scannerProductModal">
+    <div class="modalContent">
+        <h3>قراءة باركود المنتج</h3>
+        <p>وجّه الكاميرا نحو الباركود حتى تتم قراءته تلقائياً</p>
+        <video id="videoProduct" style="display:block"></video>
+        <br>
+        <button class="btn-danger" onclick="closeModal('scannerProductModal')">إيقاف الكاميرا</button>
+    </div>
+</div>
+
+<script>
+// ==========================
+// قاعدة البيانات
+// ==========================
+
+function loadData(key, fallback) {
+    try {
+        const value = localStorage.getItem(key);
+        return value ? JSON.parse(value) : fallback;
+    } catch(e) {
+        console.error("خطأ في قراءة البيانات:", key, e);
+        return fallback;
+    }
+}
+
+let DB = loadData("products", {});
+let coupons = loadData("coupons", {});
+let storeName = localStorage.getItem("storeName") || "متجر الكاشير";
+
+let cart = [];
+let activeCoupon = null;
+
+let lastScanTime = 0;
+let lastScanCode = "";
+const SCAN_DELAY = 1000;
+
+const BarcodeReader = ZXing.BrowserMultiFormatReader || ZXing.BrowserBarcodeReader;
+const codeReader = new BarcodeReader();
+
+let scannerControls = null;
+let scannerSession = 0;
+let flashTimer = null;
+
+document.getElementById("display-store-name").textContent = storeName;
+
+// ==========================
+// أدوات مساعدة
+// ==========================
+
+function saveData(key, value) {
+    try {
+        localStorage.setItem(key, JSON.stringify(value));
+        return true;
+    } catch(e) {
+        alert("تعذر حفظ البيانات في الجهاز. تحقق من مساحة التخزين.");
+        console.error(e);
+        return false;
+    }
+}
+
+function getProductPrice(value) {
+    const price = Number(value);
+    return Number.isFinite(price) && price >= 0 ? price : null;
+}
+
+function toggleMenu() {
+    const menu = document.getElementById("menu");
+    menu.style.right = menu.style.right === "0px" ? "-300px" : "0px";
+}
+
+function changeStoreName() {
+    const n = prompt("الاسم الجديد:", storeName);
+    if(n && n.trim()) {
+        storeName = n.trim();
+        localStorage.setItem("storeName", storeName);
+        document.getElementById("display-store-name").textContent = storeName;
+    }
+}
+
+function closeModal(id) {
+    document.getElementById(id).style.display = "none";
+    if(id === "scannerBillModal" || id === "scannerProductModal") stopScanner();
+}
+
+function stopScanner() {
+    scannerSession++;
+    if(scannerControls) {
+        try { scannerControls.stop(); } catch(e) { console.log(e); }
+        scannerControls = null;
+    }
+    try { codeReader.reset(); } catch(e) { console.log(e); }
+}
+
+function triggerFlash() {
+    const vid = document.getElementById("videoBill");
+    clearTimeout(flashTimer);
+    vid.classList.remove("flash-success");
+    void vid.offsetWidth;
+    vid.classList.add("flash-success");
+    flashTimer = setTimeout(() => vid.classList.remove("flash-success"), 750);
+}
+
+// ==========================
+// إضافة المنتجات للفاتورة
+// ==========================
+
+function addByCode() {
+    const code = document.getElementById("scanCode").value.trim();
+    const q = Number(document.getElementById("qty").value);
+
+    if(!code) {
+        alert("أدخل الباركود أولاً");
+        return false;
+    }
+
+    if(!Number.isInteger(q) || q <= 0) {
+        alert("أدخل كمية صحيحة أكبر من صفر");
+        return false;
+    }
+
+    if(!DB[code]) {
+        alert("المنتج غير موجود في المخزن");
+        return false;
+    }
+
+    const existingIndex = cart.findIndex(i => i.code === code);
+
+    if(existingIndex !== -1) {
+        const item = cart[existingIndex];
+        item.qty += q;
+        item.total = item.price * item.qty;
+
+        // نقل المنتج الذي تم مسحه إلى أول السلة
+        cart.splice(existingIndex, 1);
+        cart.unshift(item);
+    } else {
+        const price = getProductPrice(DB[code].price);
+
+        if(price === null) {
+            alert("سعر المنتج غير صالح");
+            return false;
+        }
+
+        cart.unshift({
+            code,
+            name: DB[code].name,
+            price,
+            qty: q,
+            total: price * q
+        });
+    }
+
+    document.getElementById("scanCode").value = "";
+    renderCart();
+    triggerFlash();
+    return true;
+}
+
+// ==========================
+// حساب الخصم والإجمالي
+// ==========================
+
+function calculateTotals() {
+    const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+    let discount = 0;
+
+    if(activeCoupon && coupons[activeCoupon]) {
+        const cp = coupons[activeCoupon];
+        discount = cp.type === "percent"
+            ? subtotal * cp.value / 100
+            : cp.value;
+    }
+
+    discount = Math.min(subtotal, Math.max(0, discount));
+
+    return {
+        subtotal,
+        discount,
+        final: subtotal - discount
+    };
+}
+
+// ==========================
+// عرض السلة
+// ==========================
+
+function renderCart() {
+    const bill = document.getElementById("bill");
+    bill.innerHTML = "";
+
+    cart.forEach((item, index) => {
+        item.total = item.price * item.qty;
+
+        const tr = document.createElement("tr");
+
+        const name = document.createElement("td");
+        name.textContent = item.name;
+
+        const price = document.createElement("td");
+        price.textContent = item.price.toFixed(2);
+
+        const qty = document.createElement("td");
+        qty.textContent = item.qty;
+
+        const total = document.createElement("td");
+        total.textContent = item.total.toFixed(2);
+
+        const actions = document.createElement("td");
+        const controls = document.createElement("div");
+        controls.className = "qty-controls";
+
+        const plus = document.createElement("button");
+        plus.className = "btn-success btn-qty";
+        plus.textContent = "+";
+        plus.addEventListener("click", () => changeQty(index, 1));
+
+        const minus = document.createElement("button");
+        minus.className = "btn-qty";
+        minus.textContent = item.qty > 1 ? "-" : "🗑";
+        minus.addEventListener("click", () => changeQty(index, -1));
+
+        controls.append(plus, minus);
+        actions.appendChild(controls);
+        tr.append(name, price, qty, total, actions);
+        bill.appendChild(tr);
+    });
+
+    const totals = calculateTotals();
+    document.getElementById("total").textContent =
+        "الإجمالي: " + totals.final.toFixed(2) + " ريال";
+}
+
+// ==========================
+// تعديل الكمية
+// ==========================
+
+function changeQty(index, delta) {
+    const item = cart[index];
+    if(!item) return;
+
+    item.qty += delta;
+
+    if(item.qty <= 0) {
+        cart.splice(index, 1);
+    } else {
+        item.total = item.price * item.qty;
+    }
+
+    renderCart();
+}
+
+// ==========================
+// إضافة منتج جديد
+// ==========================
+
+function openAddProduct() {
+    toggleMenu();
+    document.getElementById("addModal").style.display = "block";
+    clearProductFields();
+}
+
+function clearProductFields() {
+    document.getElementById("pname").value = "";
+    document.getElementById("pprice").value = "";
+    document.getElementById("pcode").value = "";
+}
+
+function saveProduct() {
+    const name = document.getElementById("pname").value.trim();
+    const price = getProductPrice(document.getElementById("pprice").value);
+    const code = document.getElementById("pcode").value.trim();
+
+    if(!name || price === null || !code) {
+        alert("يرجى إدخال اسم المنتج وسعر صحيح والباركود");
+        return;
+    }
+
+    if(DB[code]) {
+        alert("هذا الباركود مسجل مسبقاً");
+        return;
+    }
+
+    DB[code] = {name, price};
+
+    if(!saveData("products", DB)) {
+        delete DB[code];
+        return;
+    }
+
+    clearProductFields();
+    document.getElementById("pname").focus();
+    alert("تم حفظ المنتج بنجاح");
+}
+
+// ==========================
+// عرض المنتجات
+// ==========================
+
+function showProducts() {
+    toggleMenu();
+    const list = document.getElementById("productsList");
+    list.innerHTML = "";
+
+    for(const code in DB) {
+        const product = DB[code];
+        const tr = document.createElement("tr");
+
+        const name = document.createElement("td");
+        name.textContent = product.name;
+
+        const price = document.createElement("td");
+        price.textContent = Number(product.price).toFixed(2);
+
+        const barcode = document.createElement("td");
+        barcode.textContent = code;
+
+        const actions = document.createElement("td");
+
+        const edit = document.createElement("button");
+        edit.className = "btn-edit";
+        edit.textContent = "✏️";
+        edit.addEventListener("click", () => openEditModal(code));
+
+        const del = document.createElement("button");
+        del.className = "btn-danger";
+        del.textContent = "🗑";
+        del.addEventListener("click", () => deleteProduct(code));
+
+        actions.append(edit, del);
+        tr.append(name, price, barcode, actions);
+        list.appendChild(tr);
+    }
+
+    document.getElementById("productsModal").style.display = "block";
+}
+
+// ==========================
+// حذف منتج
+// ==========================
+
+function deleteProduct(code) {
+    if(!confirm("هل تريد حذف هذا المنتج؟")) return;
+
+    const old = DB[code];
+    delete DB[code];
+
+    if(!saveData("products", DB)) {
+        DB[code] = old;
+        return;
+    }
+
+    showProducts();
+}
+
+// ==========================
+// تعديل منتج
+// ==========================
+
+function openEditModal(code) {
+    const p = DB[code];
+    if(!p) return;
+
+    document.getElementById("editName").value = p.name;
+    document.getElementById("editPrice").value = p.price;
+    document.getElementById("editCode").value = code;
+    document.getElementById("oldCode").value = code;
+    document.getElementById("editProductModal").style.display = "block";
+}
+
+function saveProductEdit() {
+    const oldCode = document.getElementById("oldCode").value;
+    const newCode = document.getElementById("editCode").value.trim();
+    const name = document.getElementById("editName").value.trim();
+    const price = getProductPrice(document.getElementById("editPrice").value);
+
+    if(!name || !newCode || price === null) {
+        alert("يرجى إدخال بيانات صحيحة");
+        return;
+    }
+
+    if(newCode !== oldCode && DB[newCode]) {
+        alert("الباركود الجديد مستخدم لمنتج آخر");
+        return;
+    }
+
+    const oldProduct = DB[oldCode];
+    delete DB[oldCode];
+    DB[newCode] = {name, price};
+
+    if(!saveData("products", DB)) {
+        delete DB[newCode];
+        DB[oldCode] = oldProduct;
+        return;
+    }
+
+    cart.forEach(item => {
+        if(item.code === oldCode) {
+            item.code = newCode;
+            item.name = name;
+            item.price = price;
+            item.total = price * item.qty;
+        }
+    });
+
+    closeModal("editProductModal");
+    renderCart();
+    showProducts();
+}
+
+// ==========================
+// الكوبونات
+// ==========================
+
+function openAddCoupon() {
+    toggleMenu();
+    document.getElementById("cCode").value = "";
+    document.getElementById("cValue").value = "";
+    document.getElementById("addCouponModal").style.display = "block";
+}
+
+function saveCoupon() {
+    const code = document.getElementById("cCode").value.trim().toUpperCase();
+    const value = Number(document.getElementById("cValue").value);
+    const type = document.getElementById("cType").value;
+
+    if(!code || !Number.isFinite(value) || value < 0) {
+        alert("أدخل كوداً وقيمة خصم صحيحة");
+        return;
+    }
+
+    if(type === "percent" && value > 100) {
+        alert("لا يمكن أن تتجاوز نسبة الخصم 100%");
+        return;
+    }
+
+    const old = coupons[code];
+    coupons[code] = {value, type};
+
+    if(!saveData("coupons", coupons)) {
+        if(old) coupons[code] = old;
+        else delete coupons[code];
+        return;
+    }
+
+    closeModal("addCouponModal");
+    alert("تم حفظ الكوبون بنجاح");
+}
+
+function showCoupons() {
+    toggleMenu();
+    const list = document.getElementById("couponsList");
+    list.innerHTML = "";
+
+    for(const code in coupons) {
+        const cp = coupons[code];
+        const tr = document.createElement("tr");
+
+        const c = document.createElement("td");
+        c.textContent = code;
+
+        const value = document.createElement("td");
+        value.textContent = cp.value;
+
+        const type = document.createElement("td");
+        type.textContent = cp.type === "percent" ? "نسبة %" : "مبلغ ثابت";
+
+        const actions = document.createElement("td");
+        const del = document.createElement("button");
+        del.className = "btn-danger";
+        del.textContent = "🗑";
+        del.addEventListener("click", () => deleteCoupon(code));
+
+        actions.appendChild(del);
+        tr.append(c, value, type, actions);
+        list.appendChild(tr);
+    }
+
+    document.getElementById("showCouponsModal").style.display = "block";
+}
+
+function deleteCoupon(code) {
+    if(!confirm("هل تريد حذف هذا الكوبون؟")) return;
+
+    const old = coupons[code];
+    delete coupons[code];
+
+    if(!saveData("coupons", coupons)) {
+        coupons[code] = old;
+        return;
+    }
+
+    if(activeCoupon === code) {
+        activeCoupon = null;
+        document.getElementById("discountCode").value = "";
+        document.getElementById("discountMsg").textContent = "";
+    }
+
+    renderCart();
+    showCoupons();
+}
+
+// ==========================
+// تطبيق الخصم
+// ==========================
+
+function applyDiscount() {
+    const code = document.getElementById("discountCode").value.trim().toUpperCase();
+
+    if(coupons[code]) {
+        activeCoupon = code;
+        document.getElementById("discountMsg").textContent = "✅ تم تطبيق الخصم";
+        document.getElementById("discountMsg").style.color = "#16a34a";
+    } else {
+        activeCoupon = null;
+        document.getElementById("discountMsg").textContent = "❌ كود الخصم غير صحيح";
+        document.getElementById("discountMsg").style.color = "#ef4444";
+    }
+
+    renderCart();
+}
+
+// ==========================
+// تجهيز بيانات الفاتورة
+// ==========================
+
+function prepareInvoice() {
+    if(cart.length === 0) {
+        alert("السلة فارغة!");
+        return false;
+    }
+
+    const totals = calculateTotals();
+
+    document.getElementById("r-store-name").textContent = storeName;
+    document.getElementById("r-date").textContent =
+        new Date().toLocaleString("ar-SA");
+
+    const items = document.getElementById("r-items");
+    items.innerHTML = "";
+
+    // نفس ترتيب السلة: آخر منتج تمت إضافته في الأعلى
+    cart.forEach(item => {
+        const tr = document.createElement("tr");
+
+        [item.name, item.qty, item.price.toFixed(2), (item.price * item.qty).toFixed(2)]
+            .forEach(value => {
+                const td = document.createElement("td");
+                td.textContent = value;
+                tr.appendChild(td);
+            });
+
+        items.appendChild(tr);
+    });
+
+    document.getElementById("r-subtotal").textContent = totals.subtotal.toFixed(2);
+    document.getElementById("r-total").textContent = totals.final.toFixed(2);
+
+    if(totals.discount > 0) {
+        document.getElementById("r-discount-row").style.display = "block";
+        document.getElementById("r-discount").textContent = totals.discount.toFixed(2);
+    } else {
+        document.getElementById("r-discount-row").style.display = "none";
+    }
+
+    return true;
+}
+
+// ==========================
+// طباعة الفاتورة فقط
+// لا تمسح السلة
+// ==========================
+
+function printInvoice() {
+    if(!prepareInvoice()) return;
+
+    const receipt = document.getElementById("receipt-render").innerHTML;
+    const printWindow = window.open("", "_blank");
+
+    if(!printWindow) {
+        alert("تعذر فتح نافذة الطباعة. اسمح بالنوافذ المنبثقة لهذا الموقع.");
+        return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html lang="ar" dir="rtl">
+        <head>
+            <meta charset="UTF-8">
+            <title>فاتورة مبيعات</title>
+            <style>
+                @page { margin: 10mm; }
+                body {
+                    direction: rtl;
+                    font-family: Arial, sans-serif;
+                    color: #000;
+                    background: #fff;
+                    margin: 0;
+                    padding: 10px;
+                }
+                .receipt-header {
+                    text-align: center;
+                    border-bottom: 2px dashed #000;
+                    padding-bottom: 10px;
+                    margin-bottom: 15px;
+                }
+                .receipt-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 15px 0;
+                }
+                .receipt-table th {
+                    background: none;
+                    color: #000;
+                    border-bottom: 1px solid #000;
+                    text-align: right;
+                    font-size: 13px;
+                    padding: 7px 2px;
+                }
+                .receipt-table td {
+                    padding: 8px 2px;
+                    text-align: right;
+                    border: none;
+                    font-size: 13px;
+                }
+                .receipt-footer {
+                    border-top: 2px dashed #000;
+                    padding-top: 10px;
+                    text-align: center;
+                    font-size: 14px;
+                }
+                @media print {
+                    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                }
+            </style>
+        </head>
+        <body>
+            ${receipt}
+            <script>
+                window.onload = function() {
+                    window.focus();
+                    window.print();
+                };
+                window.onafterprint = function() {
+                    window.close();
+                };
+            <\/script>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+}
+
+// ==========================
+// إتمام البيع فقط
+// لا تطبع الفاتورة
+// ==========================
+
+function completeSale() {
+    if(cart.length === 0) {
+        alert("السلة فارغة!");
+        return;
+    }
+
+    if(!confirm("هل تريد إتمام البيع وتفريغ السلة؟")) return;
+
+    cart = [];
+    activeCoupon = null;
+
+    document.getElementById("discountCode").value = "";
+    document.getElementById("discountMsg").textContent = "";
+    document.getElementById("scanCode").value = "";
+    document.getElementById("qty").value = "1";
+
+    renderCart();
+    alert("تم إتمام البيع وتفريغ السلة.");
+}
+
+// ==========================
+// تشغيل الكاميرا
+// ==========================
+
+async function startScanner(videoId, modalId, callback) {
+    stopScanner();
+    const session = scannerSession;
+    const modal = document.getElementById(modalId);
+
+    modal.style.display = "block";
+
+    try {
+        const controls = await codeReader.decodeFromVideoDevice(
+            undefined,
+            videoId,
+            (result, error) => {
+                if(session !== scannerSession) return;
+                if(result) callback(result.text);
+            }
+        );
+
+        if(session !== scannerSession) {
+            controls.stop();
+            return;
+        }
+
+        scannerControls = controls;
+    } catch(e) {
+        if(session !== scannerSession) return;
+
+        console.error(e);
+        modal.style.display = "none";
+        stopScanner();
+        alert("تعذر تشغيل الكاميرا. تحقق من صلاحية الوصول للكاميرا واتصال الموقع الآمن.");
+    }
+}
+
+// ==========================
+// كاميرا إضافة المنتجات
+// ==========================
+
+function openScannerProduct() {
+    startScanner("videoProduct", "scannerProductModal", code => {
+        document.getElementById("pcode").value = code;
+        document.getElementById("scannerProductModal").style.display = "none";
+        stopScanner();
+    });
+}
+
+// ==========================
+// كاميرا الكاشير
+// ==========================
+
+function openScannerBill() {
+    startScanner("videoBill", "scannerBillModal", code => {
+        const now = Date.now();
+
+        if(code === lastScanCode && now - lastScanTime < SCAN_DELAY) return;
+
+        lastScanCode = code;
+        lastScanTime = now;
+
+        document.getElementById("scanCode").value = code;
+        addByCode();
+    });
+}
+
+// ==========================
+// التشغيل الأول
+// ==========================
+
+renderCart();
+</script>
+
+</body>
+</html>
